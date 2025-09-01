@@ -22,27 +22,37 @@ def analyze_code_block(file_paths, previous_context, prompt_instruction, model_n
     print("Собираю содержимое файлов...")
     
     file_contents = ""
-    MAX_FILE_SIZE_KB = 1024 
+    MAX_FILE_SIZE_KB = 2048  # Увеличил до 2MB, чтобы реже пропускать файлы
 
     for path in file_paths:
         try:
-            if os.path.exists(path) and os.path.getsize(path) < MAX_FILE_SIZE_KB * 1024:
-                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                    file_contents += f"\n--- Файл: {path} ---\n{f.read()}\n"
+            if os.path.exists(path):
+                file_size_kb = os.path.getsize(path) / 1024
+                print(f"Файл {path}: размер {file_size_kb:.2f} KB")
+                if file_size_kb < MAX_FILE_SIZE_KB:
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        file_contents += f"\n--- Файл: {path} ---\n{content}\n"
+                        print(f"  - Успешно прочитан: {path} (длина: {len(content)} символов)")
+                else:
+                    print(f"Пропускаю файл (слишком большой: {file_size_kb:.2f} KB > {MAX_FILE_SIZE_KB} KB): {path}")
             else:
-                print(f"Пропускаю файл (не найден или слишком большой): {path}")
+                print(f"Пропускаю файл (не найден): {path}")
         except Exception as e:
             print(f"Ошибка при чтении файла {path}: {e}")
             continue
 
     if not file_contents and not previous_context:
-        return "Не удалось найти или прочитать файлы для анализа."
+        print("Ошибка: Не удалось найти или прочитать ни один файл для анализа.")
+        return None  # Возвращаем None вместо строки, чтобы избежать пустого контекста
     
     full_prompt = (
         f"{prompt_instruction}\n\n"
         f"Учти следующий предыдущий контекст: {previous_context}\n\n"
-        f"Код для анализа:\n{file_contents}"
-    )
+        f"Код для анализа предоставлен ниже. Проанализируй его полностью:\n{file_contents}"
+    )  # Явно указываем, что код предоставлен, чтобы избежать недоразумений с моделью
+
+    print(f"Длина полного промпта: {len(full_prompt)} символов")  # Для дебага
 
     data = {
         "model": model_name,

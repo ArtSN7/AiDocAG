@@ -113,14 +113,16 @@
 
 1. Скачать ollama - https://ollama.com/
 
-1. Установить модели
 
 ```bash
-ollama run deepseek-r1:
-ollama run llama3.2:1b
+ollama pull gemma3:4b
 ```
 
-1. Установить Python and Libraries
+```bash
+ollama serve
+```
+
+2. Установить Python and Libraries
 
 ```bash
 pip install requests
