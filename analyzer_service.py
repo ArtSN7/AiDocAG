@@ -1,29 +1,15 @@
 # analyzer_service.py
 import requests
 import os
+from config import OLLAMA_API_URL, MAX_FILE_SIZE_KB, TEMPERATURE, NUM_PREDICT
 
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
 
 def analyze_code_block(file_paths, previous_context, prompt_instruction, model_name):
-    """
-    Отправляет код на анализ в Ollama с указанной моделью и инструкциями.
-
-    Args:
-        file_paths (list): Список путей к файлам для анализа.
-        previous_context (str): Текст предыдущего контекста.
-        prompt_instruction (str): Инструкция для LLM.
-        model_name (str): Имя модели Ollama (например, 'deepseek-coder').
-
-    Returns:
-        str: Сгенерированный LLM контекст или None в случае ошибки.
-    """
-
     print(f"Использую модель: {model_name}")
     print("Собираю содержимое файлов...")
     
     file_contents = ""
-    MAX_FILE_SIZE_KB = 2048  # Увеличил до 2MB, чтобы реже пропускать файлы
-
+    
     for path in file_paths:
         try:
             if os.path.exists(path):
@@ -44,23 +30,23 @@ def analyze_code_block(file_paths, previous_context, prompt_instruction, model_n
 
     if not file_contents and not previous_context:
         print("Ошибка: Не удалось найти или прочитать ни один файл для анализа.")
-        return None  # Возвращаем None вместо строки, чтобы избежать пустого контекста
+        return None
     
     full_prompt = (
         f"{prompt_instruction}\n\n"
         f"Учти следующий предыдущий контекст: {previous_context}\n\n"
         f"Код для анализа предоставлен ниже. Проанализируй его полностью:\n{file_contents}"
-    )  # Явно указываем, что код предоставлен, чтобы избежать недоразумений с моделью
+    )
 
-    print(f"Длина полного промпта: {len(full_prompt)} символов")  # Для дебага
+    print(f"Длина полного промпта: {len(full_prompt)} символов")
 
     data = {
         "model": model_name,
         "prompt": full_prompt,
         "stream": False,
         "options": {
-            "temperature": 0.2,
-            "num_predict": 4096,
+            "temperature": TEMPERATURE,
+            "num_predict": NUM_PREDICT,
         }
     }
     

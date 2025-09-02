@@ -100,15 +100,6 @@
 
 ---
 
-## Технологии
-
-| Ollama Model | Reason | Requirements |
-| --- | --- | --- |
-| Gpt-oss 20B ( or 120B ) | DeepSeek-R1 32B ( or 70B ) | Ревью кода построчно  | от 20 ГБ до 65 ГБ памяти |
-| Llama 3.2 3B | Легкая для написания заключения | 2GB |
-
----
-
 ## Запуск
 
 1. Скачать ollama - https://ollama.com/
