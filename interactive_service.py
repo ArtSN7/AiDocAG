@@ -2,7 +2,7 @@
 import os
 import sys
 from analyzer_service import analyze_code_block
-from config import PROJECT_ROOT_FALLBACK, CONTEXT_ROOT, MODULES
+from config import PROJECT_ROOT_FALLBACK, CONTEXT_ROOT, MODULES, FINAL_PROMT, GROUP_PROMT, SUB_GROUP_PROMT, FILE_PROMT
 
 
 if len(sys.argv) > 1:
@@ -18,7 +18,6 @@ print(f"Используемый PROJECT_ROOT: {os.path.abspath(PROJECT_ROOT)}")
 os.makedirs(CONTEXT_ROOT, exist_ok=True)
 
 
-"""Собирает пути ко всем файлам из списка директорий."""
 def get_all_files_in_dir(base_dirs):
     
     all_files = []
@@ -36,6 +35,7 @@ def get_all_files_in_dir(base_dirs):
         print("Внимание: Не найдено ни одного .java или .sql файла в указанных директориях!")
     return all_files
 
+
 def load_previous_group_context(group_key):
     """Загружает объединенный контекст всех предыдущих групп."""
     context = ""
@@ -49,6 +49,7 @@ def load_previous_group_context(group_key):
             return None
     return context
 
+
 def main_menu():
     """Отображает меню и обрабатывает выбор пользователя."""
     print("\n--- Меню анализа проекта ---")
@@ -60,6 +61,7 @@ def main_menu():
     print("  [E] Выход")
     choice = input("Ваш выбор: ").upper()
     return choice
+
 
 def run_group_analysis(group_key):
     """Анализирует все подгруппы и объединяет их контексты."""
@@ -100,7 +102,7 @@ def run_group_analysis(group_key):
                 continue
             
             print(f"    - Анализирую файл: {file_path}")
-            prompt_for_file = f"Проанализируй следующий код из файла {os.path.basename(file_path)} в подгруппе {sub_group['name']}. Сфокусируйся на функциональности и назначении этого файла."
+            prompt_for_file = f"{FILE_PROMT} {os.path.basename(file_path)} в подгруппе {sub_group['name']}."
             
             file_context = analyze_code_block([file_path], "", prompt_for_file, sub_group['model'])
             
@@ -114,7 +116,7 @@ def run_group_analysis(group_key):
         
         # Обобщение контекстов файлов в контекст подгруппы
         if current_subgroup_context:
-            prompt_for_subgroup = f"Скомпонуй и обобщи следующие контексты отдельных файлов, чтобы создать связный КОНТЕКСТ для подгруппы {sub_group['name']}. Сфокусируйся на взаимодействии файлов и общей функциональности подгруппы."
+            prompt_for_subgroup = f"{SUB_GROUP_PROMT} {sub_group['name']}"
             
             final_subgroup_context = analyze_code_block([], current_subgroup_context, prompt_for_subgroup, sub_group['model'])
             
@@ -137,7 +139,7 @@ def run_group_analysis(group_key):
         print("Не удалось загрузить контекст предыдущих групп. Анализ прерван.")
         return False
 
-    prompt_for_group = f"Скомпонуй и обобщи следующие контексты подгрупп для создания связного КОНТЕКСТА ГРУППЫ для модуля {group['name']}."
+    prompt_for_group = f"{GROUP_PROMT} {group['name']}."
     
     group_context = analyze_code_block([], all_subgroup_context + previous_group_context, prompt_for_group, group['model_for_group'])
 
@@ -151,8 +153,9 @@ def run_group_analysis(group_key):
         print(f"Не удалось создать объединенный контекст для группы {group['name']}.")
         return False
 
+
 def generate_final_documentation():
-    """Собирает все контексты групп и генерирует финальный документ."""
+    
     print("\n--- Запускаю финальную генерацию документации ---")
     final_context = ""
 
@@ -166,11 +169,7 @@ def generate_final_documentation():
         print("Ошибка: Отсутствуют файлы контекста. Проанализируйте модули сначала.")
         return
 
-    final_prompt = (
-        "Используй следующий контекст, чтобы создать полную, связную и подробную документацию "
-        "для проекта IDM. Объедини все контексты в единый документ.\n"
-        "Собранный контекст:\n" + final_context
-    )
+    final_prompt = FINAL_PROMT + final_context
     
     final_documentation = analyze_code_block([], "", final_prompt, MODULES["1"]["model_for_group"])
     
