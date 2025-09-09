@@ -31,7 +31,8 @@ MODULES = {
             "1.3": {"name": "JIMFunctionality", "paths": ["jim/JIM/JIMFunctionality/src/main/java/su/jet/jim"], "model": MODEL_NAME_CODE},
             "1.4": {"name": "JIMAPIDTO", "paths": ["jim/JIM/JIMAPIDTO/src/main/java/su/jet/jim/rest"], "model": MODEL_NAME_CODE},
             "1.5": {"name": "JIMExtender", "paths": ["jim/JIM/JIMExtender/src/main/java/su/jet/jim/extender"], "model": MODEL_NAME_CODE},
-            "1.6": {"name": "DBSchema", "paths": ["JetIdmJim/DBSchema/liquibase/sql", "jim/DBSchema"], "model": MODEL_NAME_CODE},
+            "1.6": {"name": "DBSchema", "paths": ["jim/DBSchema/", "jim/DBSchema"], "model": MODEL_NAME_CODE},
+            "1.7": {"name": "DBSchemaJetIdmJim", "paths": ["JetIdmJim/DBSchema/", "jim/DBSchema/liquibase/sql"], "model": MODEL_NAME_CODE}
         }
     },
     "2": {

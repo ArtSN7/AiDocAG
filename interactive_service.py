@@ -267,6 +267,11 @@ if __name__ == "__main__":
             print("\n--- Генерация саммари для всех модулей ---")
             for module_key in MODULES:
                 generate_module_summary(module_key)
+        
+        elif choice == "G":  
+            print("\n--- Генерация саммари для всех модулей ---")
+            for module_key in MODULES:
+                generate_module_summary(module_key)
 
         elif choice.endswith("G") and choice[:-1] in MODULES: 
             generate_module_summary(choice[:-1])
