@@ -2,7 +2,7 @@
 import os
 import sys
 from analyzer_service import analyze_code_block
-from config import PROJECT_ROOT_FALLBACK, CONTEXT_ROOT, FINAL_PROMPT, FILE_PROMPT, DIR_PROMPT, TEMPERATURE, NUM_PREDICT, MODEL_NAME_CODE, MODEL_NAME_SUM, SUPPORTED_EXTENSIONS, MODULES, EXT
+from config import PROJECT_ROOT_FALLBACK, CONTEXT_ROOT, MODULES_CONTEXTS_ROOT, FILE_PROMPT, DIR_PROMPT, MODULE_PROMPT, MODEL_NAME_CODE, MODEL_NAME_SUM, SUPPORTED_EXTENSIONS, MODULES, EXT 
 
 
 if len(sys.argv) > 1:
@@ -16,6 +16,7 @@ else:
 
 print(f"Используемый PROJECT_ROOT: {os.path.abspath(PROJECT_ROOT)}")
 os.makedirs(CONTEXT_ROOT, exist_ok=True)
+os.makedirs(MODULES_CONTEXTS_ROOT, exist_ok=True)
 
 
 def get_all_files_in_dir(base_dir, extensions=SUPPORTED_EXTENSIONS):
@@ -36,45 +37,18 @@ def get_all_files_in_dir(base_dir, extensions=SUPPORTED_EXTENSIONS):
     return all_files
 
 
-def build_context_tree(root_dir=PROJECT_ROOT, context_root=CONTEXT_ROOT):
+def analyze_files_in_dir(root_dir, context_root=CONTEXT_ROOT):
     """
-    Рекурсивно строит дерево контекстов: сначала анализирует файлы в листовых директориях,
-    затем агрегирует контексты поддиректорий вверх по дереву.
-    Возвращает путь к финальному контексту корневой директории.
+    Анализирует все одиночные файлы в директории рекурсивно, создавая контексты только для файлов.
     """
     relative_root = os.path.relpath(root_dir, PROJECT_ROOT)
     context_dir = os.path.join(context_root, relative_root) if relative_root != '.' else context_root
     os.makedirs(context_dir, exist_ok=True)
-    context_file = os.path.join(context_dir, "dir_context." + EXT)
 
-    if os.path.exists(context_file):
-        print(f"Контекст для директории {root_dir} уже существует: {context_file}. Использую его.")
-        return context_file
+    print(f"\n--- Анализирую файлы в директории: {root_dir} ---")
 
-    print(f"\n--- Анализирую директорию: {root_dir} ---")
+    files = get_all_files_in_dir(root_dir)
 
-    # Шаг 1: Собрать все поддиректории и файлы, исключая директорию контекстов
-    subdirs = []
-    files = []
-    for entry in os.listdir(root_dir):
-        full_path = os.path.join(root_dir, entry)
-        if os.path.isdir(full_path) and entry != os.path.basename(CONTEXT_ROOT):
-            subdirs.append(full_path)
-        elif any(entry.lower().endswith(ext) for ext in SUPPORTED_EXTENSIONS):
-            files.append(full_path)
-
-    # Шаг 2: Рекурсивно обработать поддиректории и собрать их контексты
-    subdir_contexts = ""
-    for subdir in subdirs:
-        sub_context_file = build_context_tree(subdir, context_root)
-        if sub_context_file and os.path.exists(sub_context_file):
-            with open(sub_context_file, 'r', encoding='utf-8') as f:
-                subdir_contexts += f"\n--- Контекст поддиректории {os.path.basename(subdir)} ---\n{f.read()}\n\n"
-        else:
-            print(f"Внимание: Не удалось получить контекст для поддиректории {subdir}.")
-
-    # Шаг 3: Анализировать файлы в текущей директории
-    file_contexts = ""
     if files:
         print(f"  - Найдено {len(files)} файлов для анализа в {root_dir}.")
         for file_path in files:
@@ -84,8 +58,6 @@ def build_context_tree(root_dir=PROJECT_ROOT, context_root=CONTEXT_ROOT):
 
             if os.path.exists(context_file_path):
                 print(f"    - Контекст для файла {os.path.basename(file_path)} уже существует. Использую его.")
-                with open(context_file_path, 'r', encoding='utf-8') as f:
-                    file_contexts += f.read() + "\n\n"
                 continue
 
             print(f"    - Анализирую файл: {file_path}")
@@ -96,73 +68,144 @@ def build_context_tree(root_dir=PROJECT_ROOT, context_root=CONTEXT_ROOT):
             if file_context:
                 with open(context_file_path, "w", encoding="utf-8") as f:
                     f.write(file_context)
-                file_contexts += file_context + "\n\n"
                 print(f"    - Контекст для {os.path.basename(file_path)} сохранен в {context_file_path}.")
             else:
                 print(f"    - Анализ файла {file_path} не удался.")
-
-    # Шаг 4: Агрегировать контексты файлов и поддиректорий в контекст текущей директории
-    all_context = file_contexts + subdir_contexts
-    if all_context:
-        print(f"  - Агрегирую контексты для директории {root_dir}...")
-        prompt_for_dir = f"{DIR_PROMPT} {os.path.basename(root_dir)}."
-
-        dir_context = analyze_code_block([], all_context, prompt_for_dir, MODEL_NAME_SUM)
-
-        if dir_context:
-            with open(context_file, "w", encoding="utf-8") as f:
-                f.write(dir_context)
-            print(f"  - Контекст для директории {root_dir} сохранен в {context_file}.")
-            return context_file
-        else:
-            print(f"  - Не удалось агрегировать контекст для директории {root_dir}.")
-            return None
     else:
-        print(f"  - Нет контекстов для агрегации в директории {root_dir}.")
+        print(f"  - Нет файлов для анализа в директории {root_dir}.")
+
+
+def build_dir_summary_tree(context_dir, modules_contexts_root=MODULES_CONTEXTS_ROOT): 
+    """
+    Рекурсивно строит дерево саммари для директорий на основе существующих контекстов файлов в CONTEXT_ROOT.
+    Возвращает путь к файлу саммари текущей директории.
+    """
+    relative_context = os.path.relpath(context_dir, CONTEXT_ROOT)
+    summary_dir = os.path.join(modules_contexts_root, relative_context) if relative_context != '.' else modules_contexts_root
+    os.makedirs(summary_dir, exist_ok=True)
+    summary_file = os.path.join(summary_dir, "dir_summary." + EXT)
+
+    if os.path.exists(summary_file):
+        print(f"Саммари для директории {context_dir} уже существует: {summary_file}. Использую его.")
+        return summary_file
+
+    print(f"\n--- Создаю саммари для директории: {context_dir} ---")
+
+    # Шаг 1: Собрать поддиректории и файлы контекстов (игнорируя другие файлы)
+    subdirs = []
+    file_contexts = ""
+
+    for entry in os.listdir(context_dir):
+        full_path = os.path.join(context_dir, entry)
+
+        if os.path.isdir(full_path):
+            subdirs.append(full_path)
+
+        elif entry.endswith('_context.' + EXT):
+
+            with open(full_path, 'r', encoding='utf-8') as f:
+                file_contexts += f"\n--- Контекст файла {entry} ---\n{f.read()}\n\n"
+
+    # Шаг 2: Рекурсивно обработать поддиректории и собрать их саммари
+    subdir_summaries = ""
+
+    for subdir in subdirs:
+        sub_summary_file = build_dir_summary_tree(subdir, modules_contexts_root)
+
+        if sub_summary_file and os.path.exists(sub_summary_file):
+
+            with open(sub_summary_file, 'r', encoding='utf-8') as f:
+                subdir_summaries += f"\n--- Саммари поддиректории {os.path.basename(subdir)} ---\n{f.read()}\n\n"
+
+        else:
+            print(f"Внимание: Не удалось получить саммари для поддиректории {subdir}.")
+
+    # Шаг 3: Агрегировать контексты файлов и саммари поддиректорий
+    all_context = file_contexts + subdir_summaries
+
+    if all_context:
+
+        print(f"  - Агрегирую контексты для директории {context_dir}...")
+        prompt_for_dir = f"{DIR_PROMPT} для директории {os.path.basename(context_dir)}."
+
+        dir_summary = analyze_code_block([], all_context, prompt_for_dir, MODEL_NAME_SUM)
+
+        if dir_summary:
+
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write(dir_summary)
+
+            print(f"  - Саммари для директории {context_dir} сохранено в {summary_file}.")
+
+            return summary_file
+        
+        else:
+
+            print(f"  - Не удалось создать саммари для директории {context_dir}.")
+            return None
+        
+    else:
+        print(f"  - Нет контекстов для агрегации в директории {context_dir}.")
         return None
 
 
-def generate_final_documentation():
-    print("\n--- Запускаю финальную генерацию документации ---")
-    
-    # Собираем все групповые контексты модулей вместо корневого контекста
-    all_context = ""
-    for module_key, module in MODULES.items():
-        group_context_file = os.path.join(CONTEXT_ROOT, module["group_context_file"])
-        if os.path.exists(group_context_file):
-            with open(group_context_file, 'r', encoding='utf-8') as f:
-                all_context += f"\n--- Контекст модуля {module['name']} ---\n{f.read()}\n\n"
-        else:
-            print(f"Внимание: Контекст для модуля {module['name']} не найден: {group_context_file}")
+def generate_module_summary(module_key):
+    """Генерирует саммари для всего модуля на основе саммари подгрупп."""
 
-    if not all_context:
-        print("Ошибка: Нет доступных контекстов модулей для генерации документации.")
+    if module_key not in MODULES:
+        print(f"Ошибка: Модуль '{module_key}' не найден в конфигурации.")
         return
 
-    final_prompt = FINAL_PROMPT + all_context
+    module = MODULES[module_key]
 
-    final_documentation = analyze_code_block([], "", final_prompt, MODEL_NAME_SUM)
+    print(f"\n--- Генерирую саммари для модуля: {module['name']} ---")
 
-    if final_documentation:
-        final_doc_path = os.path.join(CONTEXT_ROOT, "final_documentation." + EXT)
-        with open(final_doc_path, "w", encoding="utf-8") as f:
-            f.write(final_documentation)
-        print(f"\n--- Итоговая документация сохранена в {final_doc_path} ---")
+    all_subgroup_summaries = ""
+
+    for sub_key, sub_group in module["subgroups"].items():
+        for path in sub_group["paths"]:
+
+            sub_context_dir = os.path.join(CONTEXT_ROOT, path)
+
+            if os.path.exists(sub_context_dir):
+
+                print(f"  - Обрабатываю подгруппу: {sub_group['name']} в {sub_context_dir}")
+
+                # Строим дерево саммари для этой подгруппы
+                sub_summary_file = build_dir_summary_tree(sub_context_dir)
+
+                if sub_summary_file:
+
+                    with open(sub_summary_file, 'r', encoding='utf-8') as f:
+                        all_subgroup_summaries += f"\n--- Саммари подгруппы {sub_group['name']} (путь: {path}) ---\n{f.read()}\n\n"
+
+            else:
+                print(f"Внимание: Директория контекстов не существует: {sub_context_dir}")
+
+    module_summary_dir = os.path.join(MODULES_CONTEXTS_ROOT, module['name'])
+    os.makedirs(module_summary_dir, exist_ok=True)
+    module_summary_file = os.path.join(module_summary_dir, "module_summary." + EXT)
+
+    if all_subgroup_summaries:
+
+        prompt_for_module = f"{MODULE_PROMPT} для модуля {module['name']}."
+
+        module_summary = analyze_code_block([], all_subgroup_summaries, prompt_for_module, MODEL_NAME_SUM)
+
+        if module_summary:
+
+            with open(module_summary_file, "w", encoding="utf-8") as f:
+                f.write(module_summary)
+
+            print(f"Саммари для модуля {module['name']} сохранено в {module_summary_file}.")
+
     else:
-        print("Не удалось сгенерировать финальную документацию.")
-
-
-def run_specific_dir_analysis(specific_path):
-    """Анализирует указанную директорию рекурсивно."""
-    full_path = os.path.join(PROJECT_ROOT, specific_path)
-    if not os.path.isdir(full_path):
-        print(f"Ошибка: '{specific_path}' не является директорией в PROJECT_ROOT.")
-        return
-    build_context_tree(root_dir=full_path)
+        print(f"Нет саммари подгрупп для модуля {module['name']}.")
 
 
 def run_module_analysis(module_key):
-    """Анализирует модуль по предопределенной структуре из config.MODULES."""
+    """Анализирует модуль по предопределенной структуре из config.MODULES, обрабатывая только одиночные файлы в подгруппах."""
+
     if module_key not in MODULES:
         print(f"Ошибка: Модуль '{module_key}' не найден в конфигурации.")
         return
@@ -170,47 +213,47 @@ def run_module_analysis(module_key):
     module = MODULES[module_key]
     print(f"\n--- Анализирую модуль: {module['name']} ---")
 
-    all_subgroup_context = ""
     for sub_key, sub_group in module["subgroups"].items():
-        # Берем все пути подгруппы и анализируем каждый
+
         for path in sub_group["paths"]:
+
             sub_dir = os.path.join(PROJECT_ROOT, path)
+
             if os.path.exists(sub_dir):
+
                 print(f"  - Анализирую подгруппу: {sub_group['name']} в {sub_dir}")
-                sub_context_file = build_context_tree(root_dir=sub_dir)
-                if sub_context_file:
-                    with open(sub_context_file, 'r', encoding='utf-8') as f:
-                        all_subgroup_context += f"\n--- Контекст подгруппы {sub_group['name']} (путь: {path}) ---\n{f.read()}\n\n"
+                analyze_files_in_dir(root_dir=sub_dir)
+
             else:
                 print(f"Внимание: Путь не существует: {sub_dir}")
 
-    # Агрегировать для группы модуля
-    group_context_file = os.path.join(CONTEXT_ROOT, module["group_context_file"])
-    if all_subgroup_context:
-        prompt_for_group = f"{DIR_PROMPT} для модуля {module['name']}."
-        group_context = analyze_code_block([], all_subgroup_context, prompt_for_group, module['model_for_group'])
-        if group_context:
-            with open(group_context_file, "w", encoding="utf-8") as f:
-                f.write(group_context)
-            print(f"Контекст для модуля {module['name']} сохранен в {group_context_file}.")
+
+def run_all_modules_analysis():
+    """Имитирует полный анализ, прогоняя все модули из config.MODULES автоматически."""
+    print("\n--- Имитация полного анализа: прогон по всем модулям автоматически ---")
+    for module_key in MODULES:
+        run_module_analysis(module_key)
 
 
 def main_menu():
-    """Отображает меню и обрабатывает выбор пользователя."""
+
     print("\n--- Меню анализа проекта ---")
     print("Выберите действие:")
-    print("  [A] Проанализировать весь проект (имитация прогона по всем модулям автоматически)")
-    print("  [S] Проанализировать конкретную директорию (введите относительный путь, напр. jim/JIM/JIMCore/src/main/java/su/jet/jim)")
+    print("  [A] Проанализировать все модули и сделать для них базовые контексты и саммари")
+    print("  [G] Сгенерировать саммари для всех модулей ( нужно сделать анализ на базовом уровне сначала )")
+
     for key, mod in MODULES.items():
-        status = " (ГОТОВ)" if os.path.exists(os.path.join(CONTEXT_ROOT, mod["group_context_file"])) else ""
-        print(f"  [{key}] Проанализировать модуль: {mod['name']}{status}")
-    print("  [F] Сгенерировать финальную документацию")
+        print(f"  [{key}] Проанализировать модуль: {mod['name']} (файлы)")
+        print(f"  [{key}G] Сгенерировать саммари для модуля: {mod['name']}")
+
     print("  [E] Выход")
+
     choice = input("Ваш выбор: ").upper()
     return choice
 
 
 if __name__ == "__main__":
+
     while True:
         choice = main_menu()
 
@@ -218,17 +261,16 @@ if __name__ == "__main__":
             print("Выход.")
             sys.exit(0)
 
-        elif choice == "F":
-            generate_final_documentation()
-
         elif choice == "A":
-            print("\n--- Имитация полного анализа: прогон по всем модулям автоматически ---")
-            for module_key in MODULES:
-                run_module_analysis(module_key)
+            run_all_modules_analysis()
 
-        elif choice == "S":
-            specific_path = input("Введите относительный путь к директории: ").strip()
-            run_specific_dir_analysis(specific_path)
+            print("\n--- Генерация саммари для всех модулей ---")
+            for module_key in MODULES:
+                generate_module_summary(module_key)
+
+        elif choice.endswith("G") and choice[:-1] in MODULES: 
+            generate_module_summary(choice[:-1])
+
 
         elif choice in MODULES:
             run_module_analysis(choice)

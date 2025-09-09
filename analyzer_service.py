@@ -1,4 +1,3 @@
-# analyzer_service.py
 import requests
 import os
 from config import OLLAMA_API_URL, MAX_FILE_SIZE_KB, TEMPERATURE, NUM_PREDICT
